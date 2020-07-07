@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<link rel="shortcut icon" href="favicon.png">
+	<title>RetroTurbo</title>
+	<link rel="stylesheet" href="element.css">
+	<link rel="stylesheet" href="dygraph.min.css" />
+	<link rel="stylesheet" href="show-hint.css" />
+	<style>
+	body, html {
+		height: 100%;
+		width: 100%;
+		margin: 0;
+		padding: 0;
+		overflow-x: hidden;
+	}
+	#app, #ifs{
+		height: 100%;
+		width: 100%;
+		margin: 0;
+		padding: 0;
+		text-align: center;
+		display: table;
+	}
+	#app .inner {
+		display: table-cell;
+		vertical-align: middle;
+		font-weight: bold;
+	}
+	#ifs {
+		background-color: white;
+	}
+	.if {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		margin: 0;
+		padding: 0;
+		border: 0;
+	}
+	.el-row {
+		margin-bottom: 20px;
+	}
+	.el-col {
+		border-radius: 4px;
+	}
+	.bg-purple {
+		background: #d3dce6;
+	}
+	.bg-purple-light {
+		background: #e5e9f2;
+	}
+	.grid-content {
+		border-radius: 4px;
+		min-height: 80px;
+		text-align: left;
+		padding: 10px;
+	}
+	.row-bg {
+		padding: 10px 0;
+		background-color: #f9fafc;
+	}
+	.el-collapse-item__header {
+		background: #e5e9f2;
+		height: 30px;
+		font-weight: bold;
+	}
+	.el-collapse-item__content {
+		padding: 0;
+	}
+	textarea {
+		padding: 0;
+		outline: none;
+		border: 0;
+		word-break: break-all;
+		tab-size: 4;
+	}
+	.CodeMirror {
+		height: 500px !important;
+		line-height: 16px !important;
+	}
+	.CodeMirror-lines {
+		padding: 0px 0 !important;
+	}
+	</style>
+</head>
+<body>
+	<div id="app">
+		<div class="inner">
+			<p style="font-size: 200%; ">RetroTurbo WebGUI</p>
+			<p style="color: grey;">WebSocket Connection [ <strong style="color: black;" title="set 'host' and 'port' in GET parameters">
+				{{ mqtt_host }}:{{ mqtt_port }}</strong> ]: 
+				<strong v-bind:style="{ color: mqtt_connected ? 'green' : 'red' }">{{ mqtt_status }}</strong></p>
+			<code style="color: peru;">ClientID: <strong style="color: black;">{{ mqtt_clientid }}</strong>, 
+				TurboHost: <strong style="color: black;">{{ turbo_id ? turbo_id : "null" }}</strong>
+				[ {{ turbo_version ? turbo_version : "null" }} ]</code>
+			<p style="font-size: 80%;"><strong style="color: red;">[NEW]</strong> use <a href="lua/execlua.py">python command line tool</a> to run Lua script (without drawing)</p>
+			<p>
+				<audio controls style="height: 30px; position: relative; top: 10px;" id="music_ele">
+					<source src="lua/sound.mp3" type="audio/mpeg">
+					<embed height="30" width="100" src="lua/sound.mp3">
+				</audio>
+				<el-switch v-model="play_sound" active-text="music when finished" inactive-text=""></el-switch>
+				<el-button type="success" size="mini" v-on:click="reconnect">reconnect</el-button>
+				<el-button type="danger" size="mini" :disabled="turbo_id?false:true" v-on:click="shutdown">shutdown{{ shutdown_count ? " (" + shutdown_count + ")" : ""}}</el-button>
+			</p>
+			<el-row :gutter="20">
+				<el-col :span="11" :offset="1"><div class="grid-content bg-purple">
+					<p>Log Here 
+						<el-button type="warning" size="mini" v-on:click="clearlog">clear</el-button>
+						&nbsp; <strong style="color: grey; font-size: 60%;">Data Recorder({{ recorder_size }}): {{ recorder_file }}</strong>
+						<el-button type="primary" size="mini" v-on:click="record_toggle" :disabled="turbo_id?false:true">{{ recorder_enabled ? "stop record" : "enable record" }}</el-button>
+					</p>
+					<textarea readonly style="background-color: white; padding: 5px; width: calc(100% - 10px); height: 200px; resize: vertical;" v-model="logdata"></textarea>
+					<p>Graphs Here <el-button type="warning" size="mini" v-on:click="cleargraph">clear</el-button></p>
+					<div ref="drawdiv">
+						<div v-for="g in graphs" style="background-color: white; margin-bottom: 10px; padding: 5px; font-size: 20px;">
+							{{ g.title }}
+							<el-button type="warning" size="mini" v-on:click="removegraph(g.ref)">remove</el-button>
+							<strong style="font-size: 50%; color: grey;">{{ g.time }}</strong>
+							<el-button v-for="b in g.visible" v-bind:key="b.idx" size="mini" :type="b.show?'success':'danger'" v-on:click="togglevisible(g.ref, b.idx)">{{ b.name }}</el-button>
+							<div :style="'height: ' + (g.scatter?600:300) + 'px; margin-top: 5px;'" :id="'gr'+g.ref"></div>
+						</div>
+					</div>
+				</div></el-col>
+				<el-col :span="11"><div class="grid-content bg-purple-light">
+					<p>Remote run Lua code
+						<el-tooltip class="item" effect="dark" content="enable this will encapsulate library code into 'librarycode' as string, for your convenience to record or execute" placement="bottom-end">
+							<el-switch style="float:right; margin-right: 20px;"
+								v-model="encapsulate_librarycode"
+								active-color="#13ce66"
+								inactive-color="#ff4949"
+								active-text="encapsulate library code">
+							</el-switch>
+						</el-tooltip>
+					</p>
+					<el-collapse v-model="activeNames">
+						<el-collapse-item name="1">
+							<template slot="title">
+								library code <!--&nbsp;&nbsp;<el-button type="success" size="mini" v-on:click="">save</el-button>-->
+							</template>
+							<codemirror :options="{mode: 'lua',extraKeys: {'Ctrl-Space': 'autocomplete','Ctrl-/': 'toggleComment'},lineNumbers:true,lineWrapping:true,allowDropFileTypes:['lua'],viewportMargin:24}" v-model="librarycode" ref="librarycode"></codemirror>
+						</el-collapse-item>
+						<el-collapse-item title="user code" name="2">
+							<codemirror :options="{mode: 'lua',extraKeys: {'Ctrl-Space': 'autocomplete','Ctrl-/': 'toggleComment'},lineNumbers:true,lineWrapping:true,allowDropFileTypes:['lua']}" v-model="usercode_lists[usercode_idx].content" ref="usercode"></codemirror>
+						</el-collapse-item>
+					</el-collapse>
+					<el-button type="success" size="mini" style="margin-top: 10px;" v-on:click="runcode" :disabled="turbo_id?false:true">run code</el-button>
+					<el-button type="danger" size="mini" style="margin-top: 10px;" v-on:click="terminatecode" :disabled="turbo_id?false:true">terminate</el-button>
+					<el-button type="warning" size="mini" style="margin-top: 10px;" v-on:click="savecode">save code</el-button>
+					&nbsp;|<el-button v-for="(val, idx) in usercode_lists" v-bind:key="idx" v-bind:type="usercode_idx==idx?'primary':'info'" size="mini" v-on:click="usercode_idx=idx" style="margin-top: 10px;">{{ val.name }}</el-button>
+				</div></el-col>
+			</el-row>
+		</div>
+	</div>
+
+	<script src="mqttws31.min.js"></script>
+	<script src="vue.js"></script>
+	<script src="element.js"></script>
+	<script src="dygraph.min.js"></script>
+	<script src="moment.min.js"></script>
+	<script src="vuecodemirror.min.js"></script>
+	<script src="lua.js"></script>
+	<script src="show-hint.js"></script>
+	<script src="anyword-hint.js"></script>
+	<script src="comment.js"></script>
+<script>
+
+Function.prototype.getMultiLine = function() {
+	let lines = new String(this);  
+    lines = lines.substring(lines.indexOf("/*") + 3, lines.lastIndexOf("*/"));  
+    return lines;
+}
+
+Vue.use(VueCodeMirror)
+Vue.component('codemirror', VueCodeMirror.codemirror)
+var app = new Vue({
+	el: '#app',
+	data: {
+		message: 'Hello Vue!',
+		mqtt_connected: false,
+		mqtt_status: "connecting...",
+		mqtt_host: getpara("host", document.domain),
+		mqtt_port: parseInt(getpara("port", window.location.port == "" ? "80" : window.location.port)),
+		mqtt_clientid: getpara("clientid", randomID()),
+		mqtt_topic: getpara("topic", "retroturbo/"),
+		turbo_version: null,
+		turbo_id: getpara("serverid", null),
+		mqtt: null,
+		shutdown_timeout: null,
+		shutdown_count: null,
+		activeNames: ['2'],
+		play_sound: false,
+		librarycode: (function() {  // lua library code here
+/*
+-- RetroTurbo Lua Library v0.0.3
+-- note: "clientid" and "serverid" pre-defined
+-- see cjson library in https://github.com/openresty/lua-cjson/
+-- see mongo query in https://docs.mongodb.com/manual/tutorial/query-documents/ and http://mongoc.org/libmongoc/current/mongoc_collection_find_with_opts.html
+-- see query json format in https://docs.mongodb.com/manual/reference/mongodb-extended-json/
+
+-- use log to print to left (without \n)
+logln = function(obj) log(tostring(obj).."\n") end
+
+retroturbo = {
+  reader = {
+    record_rx_data = function(time_ms) end,
+    plot_rx_data = function(id) end,
+    load_preamble_ref = function(filename_or_12BmongoIDhex) end,
+  },
+  tag = {
+    use9v = function() end,
+  },
+  create_tmp_file = function() end,
+  get_file_by_id = function(collection, id) end,
+  save_file = function(file) end,
+  get_metadata = function(id) end,
+  print_metadata = function(id) end,
+  -- run lua script on remote machine, default timeout is 1e9 s. remote_server_id = "" for auto search
+  proxy_run = function(script, remote_server_id, remote_host, timeout, remote_port) end,
+  remote_car_go = function(ip, x, y, r) end,  -- move car with absolute axis
+  local_car_go = function(x, y, r) end,
+  remote_qrcode_move = function(ip, target) end,  -- move to target point, must be 0, 10, 20 ...
+  local_qrcode_move = function(target) end,
+}
+rt = retroturbo
+
+-- Function Implementations
+rt.reader.record_rx_data = function(time_ms)
+  local id, filename = set_record(1)
+  sleepms(time_ms)
+  set_record(0)
+  log("the recorded data is save as: " .. filename .. "\n")
+  log("you can plot it using 'rt.reader.plot_rx_data(\"" .. id .. "\")'\n")
+  return id, filename
+end
+rt.reader.plot_rx_data = function(id)
+  draw_record_mongoID(id)
+end
+plot = draw_record_mongoID
+rt.reader.load_preamble_ref = function(filename)
+  load_preamble_ref(filename)
+end
+rt.get_file_by_id = function(collection, id)
+  local ret = mongo_get_one_as_jsonstr(collection, '{"_id":{"$oid":"'..id..'"}}', '{"limit": 1}')
+  local tab = cjson.decode(ret)
+  local meta = getmetatable(tab) or {}
+  meta.collection = collection  -- save collection name in metadata
+  meta.__tostring = function(obj) return cjson.encode(obj) end
+  setmetatable(tab, meta)
+  return tab
+end
+rt.save_file = function(file)
+  local meta = getmetatable(file)
+  local collection = meta.collection
+  local jsonstr = cjson.encode(file)
+  local id = file._id["$oid"]
+  local ret = mongo_replace_one_with_jsonstr(collection, '{"_id":{"$oid":"'..id..'"}}', jsonstr)
+  return ret
+end
+rt.create_tmp_file = function()
+  local id = mongo_create_one_with_jsonstr("tmp", "{}")
+  local tab = rt.get_file_by_id("tmp", id)
+  return tab, id
+end
+rt.get_metadata = function(id)
+  local ret = mongo_get_one_as_jsonstr("fs.files", '{"_id":{"$oid":"'..id..'"}}', '{"limit": 1}')
+  local tab = cjson.decode(ret)
+  return tab.metadata
+end
+rt.print_metadata = function(id)
+  local metadata = rt.get_metadata(id)
+  log(cjson.encode(metadata) .. "\n")
+  return metadata
+end
+rt.proxy_run = function(script, remote_server_id, remote_host, timeout, remote_port)
+  if remote_host == nil then  -- run locally
+	load(script)()
+	return 0
+  end
+  local tab, id = rt.create_tmp_file()
+  assert(type(script) == "string", "script must be string") tab.code = script
+  assert(type(remote_server_id) == "string", "remote_server_id must be string") tab.remote_ID = remote_server_id
+  assert(type(remote_host) == "string", "remote_host must be string") tab.remote_host = remote_host
+  if (remote_port == nil) then tab.remote_port = 1883 else tab.remote_port = tonumber(remote_port) end
+  local tobj = {}
+  if (timeout == nil) then tobj["$numberDouble"] = "1e9" else tobj["$numberDouble"] = tostring(timeout) end
+  tab.timeout = tobj
+  rt.save_file(tab)
+  local ret = run("Tester/HandleData/HD_ProxyRunLuaCode", "tmp", id)
+  if ret ~= 0 then return ret end
+  tab = rt.get_file_by_id("tmp", id)
+  if tab.ret == nil then return ret end
+  return ret, tonumber(tab.ret["$numberInt"])
+end
+rt.tag.use9v = function()
+  tag_set_en9(1)
+  tag_set_pwsel(1)
+end
+rt.remote_car_go = function(ip, x, y, r)
+	local tab, id = rt.create_tmp_file()
+	local r, ret = rt.proxy_run('tab=cjson.decode(mongo_get_one_as_jsonstr("tmp", \'{"_id":{"$oid":"'..id..'"}}\', \'{"limit": 1}\')) ret=run("Tester/AutoExperiment/AE_CarMove", "/dev/ttyUSB0", "'..x..'", "'..y..'", "'..r..'") tab.ret=ret mongo_replace_one_with_jsonstr("tmp", \'{"_id":{"$oid":"'..id..'"}}\', cjson.encode(tab))', "", ip, 20.0)
+	tab = rt.get_file_by_id("tmp", id)
+	assert(ret == 0 and tab.ret and tab.ret["$numberInt"] == "0", "remote run failed")
+end
+rt.local_car_go = function(x, y, r)
+	assert(run("Tester/AutoExperiment/AE_CarMove", "/dev/ttyUSB0", "..x..", "..y..", "..r..") == 0, "local run failed")
+end
+rt.remote_qrcode_move = function(ip, target)
+	local tab, id = rt.create_tmp_file()
+	local r, ret = rt.proxy_run('tab=cjson.decode(mongo_get_one_as_jsonstr("tmp", \'{"_id":{"$oid":"'..id..'"}}\', \'{"limit": 1}\')) ret=run("Tester/AutoExperiment/AE_QRCodeMoveTo", "'..target..'") tab.ret=ret mongo_replace_one_with_jsonstr("tmp", \'{"_id":{"$oid":"'..id..'"}}\', cjson.encode(tab))', "", ip, 20.0)
+	tab = rt.get_file_by_id("tmp", id)
+	assert(ret == 0 and tab.ret and tab.ret["$numberInt"] == "0", "remote run failed")
+end
+rt.local_qrcode_move = function(target)
+	assert(run("Tester/AutoExperiment/AE_QRCodeMoveTo", "'..target..'") == 0, "local run failed")
+end
+rt.print_table = function(t)
+	local print_str = ""
+    local print_r_cache={}
+    local function sub_print_r(t,indent)
+        if (print_r_cache[tostring(t)]) then
+            print_str = print_str .. (indent.."*"..tostring(t)) .. "\n"
+        else
+            print_r_cache[tostring(t)]=true
+            if (type(t)=="table") then
+                for pos,val in pairs(t) do
+                    if (type(val)=="table") then
+                        print_str = print_str .. (indent.."["..pos.."] => "..tostring(t).." {") .. "\n"
+                        sub_print_r(val,indent..string.rep(" ",string.len(pos)+8))
+                        print_str = print_str .. (indent..string.rep(" ",string.len(pos)+6).."}") .. "\n"
+                    elseif (type(val)=="string") then
+                        print_str = print_str .. (indent.."["..pos..'] => "'..val..'"') .. "\n"
+                    else
+                        print_str = print_str .. (indent.."["..pos.."] => "..tostring(val)) .. "\n"
+                    end
+                end
+            else
+                print_str = print_str .. (indent..tostring(t)) .. "\n"
+            end
+        end
+    end
+    if (type(t)=="table") then
+        print_str = print_str .. (tostring(t).." {") .. "\n"
+        sub_print_r(t,"  ")
+        log("}")
+    else
+        sub_print_r(t,"  ")
+    end
+	logln(print_str)
+	return print_str
+end
+*/
+}).getMultiLine(),
+		usercode_idx: 0,
+		usercode_lists: [
+			{name: "0", content: (function() { /*
+-- you can click buttons below to select a demo code
+-- or click above to use library code
+*/
+}).getMultiLine()},
+			{name: "1", content: ""},
+			{name: "2", content: ""},
+			{name: "simple record", content: (function() { /*
+-- auto gain control
+logln("gain is: " .. reader_gain_control(0.2))
+sleepms(100)
+
+-- first record data for 100ms
+id, filename = rt.reader.record_rx_data(100)
+-- then plot them to the left
+rt.reader.plot_rx_data(id)
+
+-- need to call external program to handle the data? yes
+run("Tester/HandleData/HD_ComputeSquareSum", id)
+-- then get the result from database (use print_metadata to print)
+ret = rt.get_metadata(id)
+log("Ia: " .. ret.computed_squaresum_avr[1]["$numberDouble"] .. "\n")
+log("Qa: " .. ret.computed_squaresum_avr[2]["$numberDouble"] .. "\n")
+log("Ib: " .. ret.computed_squaresum_avr[3]["$numberDouble"] .. "\n")
+log("Qb: " .. ret.computed_squaresum_avr[4]["$numberDouble"] .. "\n")
+*/
+}).getMultiLine()},
+			{name: "database", content: (function() { /*
+-- create a temporary file in database, for your convenience to put/get data to/from other program
+tab, id = rt.create_tmp_file()
+logln("create temporary file with ID: " .. id)
+log("the initial content is: ") logln(tab)
+
+-- then you can modify the file as you like
+tab.hello = "world"
+long_number = {} long_number["$numberLong"] = "1234567890123223"  -- this is a 64 bit signed int
+decimal_number = {} decimal_number["$numberDecimal"] = "123.0123456789012345"  -- this is 128 bit double
+my_array = {"hello", "world", "my", "boy"} setmetatable(my_array , cjson.array_mt)  -- this is array
+tab.child = { a = "b", c = long_number, d = decimal_number, e = my_array }
+log("the modified content is: ") logln(tab)
+
+-- you need to save it to database after modification
+rt.save_file(tab)
+*/
+}).getMultiLine()},
+			{name: "remote run", content: (function() { /*
+-- if you know the ID of remote server, this would work. otherwise use "" to auto search
+-- note that for localhost tests, auto search would like to fail due to LUA execute lock
+-- remote_ID = "x4ml"
+remote_ID = ""  -- use this only on different remote_host
+
+remote_host = "222.29.98.76"
+timeout = 3.0
+
+-- librarycode is only available when encapsulate enabled. this will grant ease for using library remote
+rt.proxy_run(librarycode .. [[
+  for i=1,5 do
+  	sleepms(500)
+ 	logln("hello world")
+  end
+]], remote_ID, remote_host, timeout)
+*/
+}).getMultiLine()},
+			{name: "car move", content: (function() { /*
+-- move remote car, for auto experiment
+remote_host = "192.168.0.127"
+
+-- simple move
+-- parameters are: x(mm), y(mm), r(deg)
+rt.remote_car_go(remote_host, 10, 0, 0)
+-- rt.local_car_go(10, 0, 0)  -- use this on car's turbohost
+
+-- then you might want to auto move to point, just call
+-- rt.remote_qrcode_move("192.168.0.127", 20)
+-- rt.local_qrcode_move(20)  -- use this on car's turbohost
+
+*/
+}).getMultiLine()},
+		],
+		logdata: "",
+		recorder_size: "UNKNOWN",
+		recorder_file: "UNKNOWN",
+		recorder_enabled: false,
+		refcnt: 0,
+		graphs: [],
+		encapsulate_librarycode: true,
+	},
+	methods: {
+		reconnect() {
+			this.turbo_id = null;
+			this.turbo_version = null;
+			mqtt_send("query", "");
+		},
+		shutdown() {
+			if (this.shutdown_count == null) {
+				this.shutdown_count = 3;
+				clearTimeout(this.shutdown_timeout);
+				this.shutdown_timeout = setTimeout(function() {
+					app.shutdown_count = null;
+				}, 3000);
+				return;
+			} else if (this.shutdown_count > 1) {
+				this.shutdown_count -= 1;
+				clearTimeout(this.shutdown_timeout);
+				this.shutdown_timeout = setTimeout(function() {
+					app.shutdown_count = null;
+				}, 3000);
+				return;
+			}
+			mqtt_send(this.turbo_id + "/shutdown", "");
+			this.turbo_id = null;
+			this.turbo_version = null;
+			this.shutdown_count = null;
+		},
+		clearlog() {
+			this.logdata = "";
+		},
+		log(msg) {
+			this.logdata += msg;
+		},
+		syslog(msg) {
+			this.log("[system] " + msg + "\n");
+		},
+		errlog(msg) {
+			this.log("[error] " + msg + "\n");
+		},
+		runcode() {
+			this.syslog("sending code to host...");
+			let librarycode = this.librarycode;
+			if (this.encapsulate_librarycode) {
+				librarycode = "librarycode = [[" + librarycode + "]] assert(load(librarycode), \"error in library code, disable encapsulate to debug\")()";
+			}
+			lua_do("clientid = '" + this.mqtt_clientid + "'; serverid = '" + this.turbo_id + "'; " + librarycode + "\n" + this.usercode_lists[this.usercode_idx].content);
+		},
+		terminatecode() {
+			mqtt_send(this.turbo_id + "/terminate", "");
+		},
+		savecode() {
+			let blob = new Blob([this.usercode_lists[this.usercode_idx].content], {type : 'text/x-lua'});
+			let a = document.createElement('a');
+			let url = a.href = window.URL.createObjectURL(blob);
+			a.download = 'usercode.lua';
+			a.click();
+			window.URL.revokeObjectURL(url);
+		},
+		record_toggle() {
+			if (this.recorder_enabled) {
+				mqtt_send(this.turbo_id + "/disable_record", "");
+			} else mqtt_send(this.turbo_id + "/enable_record", "");
+		},
+		cleargraph() {
+			this.graphs = [];
+		},
+		newgraph(args, data, scatter=false) {  // args should be a list like ["<title>", "simple", ""]
+			let ref = this.refcnt;
+			this.refcnt += 1;
+			this.graphs.push({
+				title: args[0],
+				ref: ref,
+				time: moment().format('YYYY/MM/DD HH:mm:ss'),
+				visible: [],
+				scatter: scatter,
+			});
+			let gidx = this.graphs.length - 1;
+			this.$nextTick(function() {
+				let div = document.getElementById("gr"+ref);
+				if (args[1] == "simple") {  // data is just array of real data
+					let length = data.length;
+					let xydat = [];
+					for (let i=0; i<length; ++i) xydat.push([i, data[i]]);
+					app.graphs[gidx].dygraph = new Dygraph(div, xydat, {
+						strokeWidth: 1,
+						labels: ['x', 'y']
+					});
+				} else if (args.length >= 7) {  // ["<title>", "int16_t", "4", "<x_unit>", "<x_label>", "<y_unit>", "<y_labels(a,b,c,d)>"]
+					let type = args[1];
+					let xydat = [];
+					let arr = null;
+					if (type == "int8_t") arr = new Int8Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+					else if (type == "uint8_t") arr = new Uint8Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+					else if (type == "int16_t") arr = new Int16Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+					else if (type == "uint16_t") arr = new Uint16Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+					else if (type == "int32_t") arr = new Int32Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+					else if (type == "uint32_t") arr = new Uint32Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+					else if (type == "float") arr = new Float32Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+					else if (type == "double") arr = new Float64Array(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+					if (arr != null) {
+						let dimension = parseInt(args[2]); app.graphs[gidx].dimension = dimension;
+						if (scatter && dimension != 2) {
+							console.error("in scatter plotting mode, dimension must be 2");
+							return;
+						}
+						console.log(args);
+						let x_unit = parseFloat(args[3]); app.graphs[gidx].x_unit = x_unit;
+						let x_label = args[4]; app.graphs[gidx].x_label = x_label;
+						let y_unit = parseFloat(args[5]); app.graphs[gidx].y_unit = y_unit;
+						let y_labels = args[6].split(','); app.graphs[gidx].y_labels = y_labels;
+						let x_bias = parseFloat(args[7]); app.graphs[gidx].x_bias = x_bias;
+						let y_bias = parseFloat(args[8]); app.graphs[gidx].y_bias = y_bias;
+						console.log("x_unit: " + x_unit)
+						console.log("y_unit: " + y_unit)
+						console.log("x_bias: " + x_bias)
+						console.log("y_bias: " + y_bias)
+						let visible = [];
+						if (!scatter) for (let i=0; i<dimension; ++i) {
+							let button_name = "";
+							if (i < y_labels.length) button_name = y_labels[i];
+							visible.push({
+								name: button_name,
+								idx: i,
+								show: true,
+							});
+						}
+						app.graphs[gidx].visible = visible;
+						let s_min = 0, s_max = 0;
+						if (scatter) s_min = s_max = arr[0];
+						for (let i=0; i<arr.length; i+=dimension) {
+							if (scatter) {
+								if (arr[i] < s_min) s_min = arr[i];
+								if (arr[i] > s_max) s_max = arr[i];
+								xydat.push([arr[i], arr[i+1]]);
+							} else {
+								let a = [i/dimension*x_unit + x_bias];
+								for (let j=0; j<dimension; ++j) a.push(arr[i+j] * y_unit + y_bias);
+								xydat.push(a);
+							}
+						}
+						let strokeWidth = 1;
+						if (scatter) strokeWidth = 0;
+						let drawPoints = false;
+						if (scatter) drawPoints = true;
+						let dateWindow = null;
+						if (scatter) dateWindow = [s_min-(s_max-s_min)*0.1, s_max+(s_max-s_min)*0.1];
+						app.graphs[gidx].dygraph = new Dygraph(div, xydat, {
+							strokeWidth: 1,
+							labels: [x_label].concat(y_labels),
+							// axis: "y1",
+							title: name,
+							// titleHeight: 32,
+							xlabel: x_label,
+							ylabel: y_labels,
+							drawPoints: drawPoints,
+							// pointSize: 2,
+							strokeWidth: strokeWidth,
+							// width: $("#graph").width(),
+							highlightCircleSize: 2,
+							highlightSeriesBackgroundAlpha: .1,
+							// highlightSeriesOpts: {
+							// 	strokeWidth: 1.5,
+							// 	strokeBorderWidth: 1,
+							// 	highlightCircleSize: 5
+							// },
+							dateWindow: dateWindow,
+						});
+						console.log(app.graphs[gidx].dygraph);
+					}
+				}
+			})
+		},
+		removegraph(ref) {
+			this.graphs = this.graphs.filter(t => t.ref != ref);
+		},
+		togglevisible(ref, bidx) {
+			for (let i=0; i<this.graphs.length; ++i) {
+				if (this.graphs[i].ref == ref) {
+					if (this.graphs[i].visible[bidx].show) {
+						this.graphs[i].dygraph.setVisibility(bidx, false);
+						this.graphs[i].visible[bidx].show = false;
+					} else {
+						this.graphs[i].dygraph.setVisibility(bidx, true);
+						this.graphs[i].visible[bidx].show = true;
+					}
+				}
+			}
+		},
+	},
+	mounted() {
+		this.mqtt = new Paho.MQTT.Client(this.mqtt_host, this.mqtt_port, this.mqtt_clientid);
+		this.mqtt.onConnectionLost = mqtt_connection_lost;
+		this.mqtt.onMessageArrived = mqtt_message_arrive;
+		this.mqtt.connect({
+			useSSL: false, mqttVersion: 4, timeout: 3, keepAliveInterval: 10,
+			onSuccess: mqtt_connect, onFailure: mqtt_failure,
+		});
+	}
+});
+
+function getpara(name, alternative=null) {
+	var reg = new RegExp("(^|&)"+ name +"=([^&]*)(&|$)");
+	var r = window.location.search.substr(1).match(reg);
+	if(r!=null) return unescape(r[2]); return alternative;
+}
+
+function randomID() {
+	let length = 4;
+	let chars = '0123456789abcdefghijklmnopqrstuvwxyz';
+	var result = '';
+	for (var i = length; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)];
+	return result;
+}
+
+function mqtt_connect() {
+	app.mqtt_connected = true;
+	app.mqtt_status = "connected";
+	app.mqtt.subscribe(app.mqtt_topic + "#");
+	mqtt_send("query", "");
+}
+
+var cmdcnt = 0;
+function mqtt_message_arrive(message) {
+	// console.log(message);
+	let topic = message.destinationName;
+	if (topic.startsWith(app.mqtt_topic + app.turbo_id + "/binary/")) {
+		let bytes = message.payloadBytes;
+		console.log("[" + (++cmdcnt) + "] " + message.destinationName + ": binary of length " + bytes.length);
+		let subtopic = topic.slice((app.mqtt_topic + app.turbo_id + "/binary/").length);
+		let subts = subtopic.split('/');
+		if (subts[0] == 'draw' && subts[1] == app.mqtt_clientid) {
+			app.newgraph(subts.slice(2), bytes);
+		} else if (subts[0] == 'scatter' && subts[1] == app.mqtt_clientid) {
+			app.newgraph(subts.slice(2), bytes, true);
+		}
+	} else {
+		let str = message.payloadString;
+		if (str.length < 200) {
+			console.log("[" + (++cmdcnt) + "] " + message.destinationName + ": " + str);
+		} else console.log("[" + (++cmdcnt) + "] " + message.destinationName + ": " + str.slice(0,200) + " ......");
+		if (topic.startsWith(app.mqtt_topic + "reply/") && topic.length == app.mqtt_topic.length + 6 + 4 && app.turbo_id == null) {
+			app.turbo_id = topic.slice(-4);
+			app.turbo_version = str;
+		} else if (topic == app.mqtt_topic + app.turbo_id + "/ret/" + app.mqtt_clientid) {
+			let errcode = parseInt(str);
+			let errstr = ["OK", "YIELD", "ERRRUN", "ERRSYNTAX", "ERRMEM", "ERRGCMM", "ERRERR", "BUSY"][errcode];
+			app.syslog("return " + errcode + " (" + errstr + ")");
+			if (app.play_sound) {
+				let audio = document.getElementById("music_ele");
+				console.log(audio);
+				audio.currentTime = 0;
+				audio.play();
+			}
+		} else if (topic == app.mqtt_topic + app.turbo_id + "/err/" + app.mqtt_clientid) {
+			app.errlog(str);
+		} else if (topic == app.mqtt_topic + app.turbo_id + "/log/" + app.mqtt_clientid) {
+			app.log(str);
+		} else if (topic == app.mqtt_topic + app.turbo_id + "/record") {
+			let a = str.indexOf(' ');
+			app.recorder_size = str.slice(0, a);
+			app.recorder_file = str.slice(a+1);
+			app.recorder_enabled = true;
+		} else if (topic == app.mqtt_topic + app.turbo_id + "/record_stop") {
+			app.recorder_enabled = false;
+		}
+	}
+}
+
+function mqtt_connection_lost() {
+	app.mqtt_connected = false;
+	app.mqtt_status = "connection lost";
+}
+
+function mqtt_failure() {
+	app.mqtt_connected = false;
+	app.mqtt_status = "connection failed";
+}
+
+function mqtt_send(topic, payload) {
+	let message = new Paho.MQTT.Message(payload);
+	message.destinationName = app.mqtt_topic + topic;
+	console.log(message.destinationName);
+	app.mqtt.send(message);
+}
+
+function lua_do(script) {
+	mqtt_send(app.turbo_id + "/do/" + app.mqtt_clientid, script);
+}
+
+</script>
+</body>
+</html>

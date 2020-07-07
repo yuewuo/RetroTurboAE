@@ -1,0 +1,15 @@
+
+FILE(GLOB_RECURSE SRC_FILES "*.cpp")
+foreach (cpp ${SRC_FILES})
+	string(REGEX REPLACE ".+/(.+)\\..*" "\\1" cppname ${cpp})
+	add_executable(${subprefix}${cppname} ${cpp})
+endforeach(cpp)
+
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIRS})
+target_link_libraries(${subprefix}CameraUndistort ${OpenCV_LIBS})
+target_link_libraries(${subprefix}QRCodeDecodeLocate ${OpenCV_LIBS})
+target_link_libraries(${subprefix}QRCodeMoveTo ${OpenCV_LIBS})
+target_link_libraries(${subprefix}DecodeFile ${OpenCV_LIBS})
+target_link_libraries(${subprefix}QRCodeDecodeLocate190818 ${OpenCV_LIBS})
+target_link_libraries(${subprefix}QRCodeMoveTo190818 ${OpenCV_LIBS})
