@@ -1,1 +1,18 @@
+build/*
+!build/ref17mseq8kSs.*
+!build/refs8x2_*
+
+.vscode
+
+# zip packages
+*.zip
+
+SoftReader-H750/MDK-ARM/*
+!SoftReader-H750/MDK-ARM/SoftReader-H750.uvprojx
+!SoftReader-H750/MDK-ARM/startup_stm32h750xx.s
+
+SoftTag-L432/MDK-ARM/*
+!SoftTag-L432/MDK-ARM/SoftTag-L432.uvprojx
+!SoftTag-L432/MDK-ARM/startup_stm32l432xx.s
+
 *.swp
