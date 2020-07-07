@@ -1,6 +1,10 @@
 # RetroTurboAE
 Artifact evaluation of RetroTurbo
 
+To facilitate evaluation, we provide a virtual machine that has environment already setup, and is able to execute the code in this document directly. You can download the virtual machine at [GitHub Release](https://github.com/wuyuepku/RetroTurboAE/releases/tag/v1.0).
+
+The GitHub repo is [https://github.com/wuyuepku/RetroTurboAE](https://github.com/wuyuepku/RetroTurboAE)
+
 ## Overview
 
 We developed a GUI testing framework that connects RetroTurbo hardware (reader and tag) as well as providing data handling and visualization tools. To use this framework, one should run the following command
@@ -10,7 +14,7 @@ cd ~/RetroTurboAE/build
 ./Tester/TurboHost/TH_Host
 ```
 
-Then you can open the browser and visit [http://localhost/retroturbo/]() for GUI, as shown below:
+Then you can open the browser and visit [http://localhost/retroturbo/](http://localhost/retroturbo/) for GUI, as shown below:
 
 ![](WebGUI/webgui.png)
 
