@@ -6,10 +6,11 @@ Artifact evaluation of RetroTurbo
 We developed a GUI testing framework that connects RetroTurbo hardware (reader and tag) as well as providing data handling and visualization tools. To use this framework, one should run the following command
 
 ```shell
-~/RetroTurbo/build/TurboHost/TH_Host.exe
+cd ~/RetroTurboAE/build
+./Tester/TurboHost/TH_Host
 ```
 
-Then you can open the browser and visit [http://localhost/retroturbo]() for GUI, as shown below:
+Then you can open the browser and visit [http://localhost/retroturbo/]() for GUI, as shown below:
 
 ![](WebGUI/webgui.png)
 
@@ -84,6 +85,59 @@ The hex value shows the PQAM symbol that each LCM module should send, and you ca
 
 ## 2. Demodulation
 
+The raw data of real-world experiments is recorded in three collections named `day`, `light` and `dark` in  Mongo database. You can open Robo 3T by running `robot3t` and click `RetroTurbo` database connection to view them:
+
+![](WebGUI/robo3t.jpg)
+
+The three collections `200204_smalltag_distance_dark`, `200204_smalltag_distance_day` and `200204_smalltag_distance_light` are real-world experiment data with the same format. Each document contains the following json:
+
+![](WebGUI/document.jpg)
+
+The red one is document id which could be used with collection name to identify a specific document. The blue one is origin data id, which stores the received waveform at 80kS/s. The yellow one is the emulated id, which stores the emulated waveform given the correct data and channel training output. The green one is scatter plot that illustrates the noise level. To visualize those waveforms and scatter plot, you can run the following code in RetroTurbo GUI.
+
+```lua
+plot("5F046CC82366E0268005DF72")  -- data_id, also demod_data_id and scatter_data_id
+plot("5F046CC8D4996E6678755042")  -- emulated_id
+plot("5F046CC86D660E7130412492")  -- scatter_output_id
+```
+
+Click `run code` and the figures will show in the left side
+
+![](WebGUI/plot.png)
+
+Till now we only display the existing data, including the original waveform and computed waveforms. We would then run the demodulation program to regenerate those results. Run the following Lua code to demodulate a specific packet, where you can pick up the collection name and document id mentioned above.
+
+```lua
+collection = "tmp"
+id = "5e3949b6841b0000f4001516"  -- document id
+rpc_port = 52220  -- channel training daemon starts at 52220 port when boot up
+
+tab = rt.get_file_by_id(collection, id)
+tab.demod_buffer_length = 64  -- demodulation branch size K in paper Sec.4.3.2
+tab.demod_nearest_count = 4  -- limit PQAM symbol decision count (optimization)
+-- remove those computed attributes to make sure it's computed again
+tab.scatter_output_id = nil
+tab.BER = nil
+tab.emulated_id = nil
+rt.save_file(tab)
+
+-- run scatter plot
+run("Tester/Emulation/EM_ScatterPlot", collection, id, ""..rpc_port)
+tab = rt.get_file_by_id(collection, id)
+plot(tab.scatter_output_id)
+
+-- run demodulate
+run("Tester/Emulation/EM_Demodulate", collection, id, ""..rpc_port)
+tab = rt.get_file_by_id(collection, id)
+BER = tonumber(tab.BER["$numberDouble"])
+logln("BER: " .. (BER * 100) .. "%")
+
+-- run emulate using reference with channel training
+run("Tester/Emulation/EM_EmulateCtd", collection, id, ""..rpc_port)
+tab = rt.get_file_by_id(collection, id)
+plot(tab.emulated_id)
+```
+
 
 
 ## 3. Emulation
@@ -92,14 +146,13 @@ The hex value shows the PQAM symbol that each LCM module should send, and you ca
 
 ## Environment Setup
 
-Although the virtual machine has everything setup, you might be interested in deploy them elsewhere. In this section we will introduce how to install it on Windows and Ubuntu.
+Although the virtual machine has everything setup, you might be interested in deploy them elsewhere. In this section we will introduce how to install it on Windows or Linux.
 
 You need to install `libmosquitto` (must with websockets enabled, you need to enable it in `config.mk` before compile it in source code) and `libmongoc` (together with `libbson`). The frontend use `mosquitto` to communicate with backend in real time. Also, you need common build tools like `cmake`, `g++`, etc. You would also need to install `nginx` to use the GUI testing framework.
 
 To build the project, move to the root of this repo then run
 
 ```shell
-mkdir build
 cd build
 cmake ..  # if you're using Linux
 cmake .. -G "MinGW Makefiles"  # if you're using windows with mingw64
@@ -139,7 +192,8 @@ After all this, you can run `build/Tester/TurboHost/TH_Host.exe` to start the ba
 To assist demodulation program, you would also need to start a channel training daemon that would takes a binary reference file and several arguments as input. You can simple run the following command
 
 ```shell
-cd build ./Tester/MatLab/ML_ctd.exe 52220 .\refs8x2_8000_8_2002041406.bin 16 320 3 4 16
+cd build
+./Tester/MatLab/ML_ctd 52220 ./refs8x2_8000_8_2002041406.bin 16 320 3 4 16
 ```
 
 It will start a RPC service at 52220 port, then you would use it to start demodulation programs as mentioned above.
