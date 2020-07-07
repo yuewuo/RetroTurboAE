@@ -1,5 +1,5 @@
 build/*
-!build/ref17mseq8kSs.*
+!build/200115_model_*
 !build/refs8x2_*
 
 .vscode

@@ -108,7 +108,7 @@ Click `run code` and the figures will show in the left side
 Till now we only display the existing data, including the original waveform and computed waveforms. We would then run the demodulation program to regenerate those results. Run the following Lua code to demodulate a specific packet, where you can pick up the collection name and document id mentioned above.
 
 ```lua
-collection = "tmp"
+collection = "200204_smalltag_distance_light"
 id = "5e3949b6841b0000f4001516"  -- document id
 rpc_port = 52220  -- channel training daemon starts at 52220 port when boot up
 
@@ -138,11 +138,22 @@ tab = rt.get_file_by_id(collection, id)
 plot(tab.emulated_id)
 ```
 
-
+For further details please see the source files, located in `Tester/Emulation/Demodulate.cpp`
 
 ## 3. Emulation
 
+In Sec.5.2 we introduced an approximation technique that could emulate the response of LCM. You can emulate any waveform at 2kS/s (2000 symbols per second), by running
 
+```shell
+./Tester/ExploreLCD/EL_200121_Emulator 17mseq_9v.bin   00110000110001000000
+./Tester/ExploreLCD/EL_200121_Emulator 17mseq_5.5v.bin 00110000110001000000
+```
+
+It will send the symbols (1 for charge and 0 for discharge) with different driven voltage of 9V and 5.5V. You can plot the result in GUI, like below:
+
+![](WebGUI/emulated.jpg)
+
+It shows that 9V driven voltage has faster charging speed and almost the same discharging speed compared to 5.5V driven voltage.
 
 ## Environment Setup
 
