@@ -25,6 +25,8 @@ inline uint64_t get_cputime() {  // return the time in 100ns
 } 
 uint64_t cputime_start = get_cputime();
 #define CONSUMED_CPUTIME ((double)(get_cputime()-cputime_start) / 1e7)
+#else
+#include <csignal>
 #endif
 
 #define DEBUG
@@ -195,6 +197,7 @@ struct DecodeBranch {
 };
 
 void compute_random_timeout(MinDistance& mindis, mutex& mut) {
+#ifdef ENABLE_CPUTIME
     struct timeval time;
 	gettimeofday( &time, NULL );
 	mt19937 generator(1000000 * time.tv_sec + time.tv_usec);
@@ -278,6 +281,9 @@ void compute_random_timeout(MinDistance& mindis, mutex& mut) {
         double consumed_cputime = CONSUMED_CPUTIME;
         fprintf(stderr, "round: %d, %.16f, time: %f %% (%f/%d)", total_round, this_round_min, consumed_cputime / min_time * 100, consumed_cputime, min_time);
     } while ((min_time < 0 || CONSUMED_CPUTIME <= min_time) && running);
+#else
+    assert(0 && "ENABLE_CPUTIME not set, cannot run");
+#endif
 }
 
 void signal_handler(int) {
