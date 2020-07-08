@@ -1,13 +1,11 @@
 # RetroTurboAE
 Artifact evaluation of RetroTurbo
 
-To facilitate evaluation, we provide a virtual machine that has environment already setup, and is able to execute the code in this document directly. You can download the virtual machine at [GitHub Release](https://github.com/wuyuepku/RetroTurboAE/releases/tag/v1.0).
-
-The GitHub repo is [https://github.com/wuyuepku/RetroTurboAE](https://github.com/wuyuepku/RetroTurboAE)
+To facilitate evaluation, we offer a virtual machine that has environment already setup, and is able to execute the code in this document without modification. You should download the virtual machine at [GitHub Release](https://github.com/wuyuepku/RetroTurboAE/releases/tag/v1.0) to start evaluation. The GitHub repo is [https://github.com/wuyuepku/RetroTurboAE](https://github.com/wuyuepku/RetroTurboAE)
 
 ## Overview
 
-We developed a GUI testing framework that connects RetroTurbo hardware (reader and tag) as well as providing data handling and visualization tools. To use this framework, one should run the following command
+We developed a GUI testing framework that connects RetroTurbo hardware (reader and tag) as well as providing data handling and visualization tools. To use this framework, one should run the following command in terminal
 
 ```shell
 cd ~/RetroTurboAE/build
@@ -17,6 +15,8 @@ cd ~/RetroTurboAE/build
 Then you can open the browser and visit [http://localhost/retroturbo/](http://localhost/retroturbo/) for GUI, as shown below:
 
 ![](WebGUI/webgui.png)
+
+You should see a green `connected` as well as a not null TurboHost ID, if not, please check host program.
 
 It mainly contains three parts, namely script block, log block and data visualization block. You can type your Lua code in the script block on the right side, then click the green button `run code` to execute them. We save our experiment scripts in `WebGUI/lua` folder if you're interested in how they interacts with real hardware and assist with our experiments.
 
@@ -161,9 +161,9 @@ It shows that 9V driven voltage has faster charging speed and almost the same di
 
 ## Environment Setup
 
-Although the virtual machine has everything setup, you might be interested in deploy them elsewhere. In this section we will introduce how to install it on Windows or Linux.
+Although the virtual machine has everything setup, you might be interested in deploying them elsewhere. In this section we will introduce how to install it on Windows or Linux.
 
-You need to install `libmosquitto` (must with websockets enabled, you need to enable it in `config.mk` before compile it in source code) and `libmongoc` (together with `libbson`). The frontend use `mosquitto` to communicate with backend in real time. Also, you need common build tools like `cmake`, `g++`, etc. You would also need to install `nginx` to use the GUI testing framework.
+You need to install `libmosquitto` (with websockets enabled, you need to enable it in `config.mk` before compile it in source code) and `libmongoc` (together with `libbson`). The frontend use `mosquitto` to communicate with backend in real time. Also, you need common build tools like `cmake`, `g++`, etc. You would also need to install `nginx` to use the GUI testing framework.
 
 To build the project, move to the root of this repo then run
 
@@ -204,11 +204,11 @@ It should all succeed, then you would be able to run those programs but still ne
 
 After all this, you can run `build/Tester/TurboHost/TH_Host.exe` to start the backend, as mentioned in overview.
 
-To assist demodulation program, you would also need to start a channel training daemon that would takes a binary reference file and several arguments as input. You can simple run the following command
+To assist demodulation program, you would also need to start a channel training daemon that would takes a binary reference file and several arguments as input. You can simplely run the following command
 
 ```shell
 cd build
 ./Tester/MatLab/ML_ctd 52220 ./refs8x2_8000_8_2002041406.bin 16 320 3 4 16
 ```
 
-It will start a RPC service at 52220 port, then you would use it to start demodulation programs as mentioned above.
+It will start a RPC service at 52220 port, then you would use it to start demodulation programs as mentioned above. This daemon is registered as a system service that will start when booting up in virtual machine.
