@@ -10,8 +10,8 @@ MongoDat mongodat;
 int main(int argc, char** argv) {
 	HANDLE_DATA_BASIC_ARG_MODIFY_ARGC_ARGV(argc, argv, &MONGO_URL, &MONGO_DATABASE);
 
-    if (argc != 3) {
-		printf("usage: <local_filename> <sequence>\n");
+    if (argc != 3 && argc != 5) {
+		printf("usage: <local_filename> <sequence> [collection] [id(12 byte hex = 24 char)]\n");
         printf("for example: ./Tester/ExploreLCD/EL_200121_Emulator.exe 200115_model_500us_17mseq_9v.bin.resampled.reordered 00110000110001000000\n");
 		return -1;
 	}
@@ -50,6 +50,15 @@ int main(int argc, char** argv) {
     mongodat.upload_record("emulated", (float*)emulated.data(), 2, emulated.size()
         , NULL, "emulated", 1./40, "time(ms)", 1, "I,Q");
     printf("upload emulated with ID: %s\n", MongoDat::OID2str(mongodat.get_fileID()).c_str());
+    
+    if (argc > 4) {
+        const char* collection_str = argv[3];
+        const char* record_id_str = argv[4];
+	    BsonOp record = mongodat.get_bsonop(collection_str, record_id_str);
+        record["emulated_id"] = MongoDat::OID2str(mongodat.get_fileID());
+        record["emulated_seq"] = sequence;
+        record.save();
+    }
 
 	mongodat.close();
 

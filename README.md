@@ -1,7 +1,9 @@
 # RetroTurboAE
 Artifact evaluation of RetroTurbo
 
-To facilitate evaluation, we offer a virtual machine that has environment already setup, and is able to execute the code in this document without modification. You should download the virtual machine at [GitHub Release](https://github.com/wuyuepku/RetroTurboAE/releases/tag/v1.0) to start evaluation. The GitHub repo is [https://github.com/wuyuepku/RetroTurboAE](https://github.com/wuyuepku/RetroTurboAE)
+To facilitate evaluation, we offer a virtual machine that has environment already setup, and is able to execute the code in this document without modification. You should download the virtual machine at [GitHub Release](https://github.com/wuyuepku/RetroTurboAE/releases/tag/v1.0) to start evaluation. The GitHub repo is [https://github.com/wuyuepku/RetroTurboAE](https://github.com/wuyuepku/RetroTurboAE).
+
+If you meet any problem with the following instructions, please see [this video](https://wuyue98.cn/pub/RetroTurboAE.mp4) for more details.
 
 ## Overview
 
@@ -148,12 +150,20 @@ For further details please see the source files, located in `Tester/Emulation/De
 
 In Sec.5.2 we introduced an approximation technique that could emulate the response of LCM. You can emulate any waveform at 2kS/s (2000 symbols per second), by running
 
-```shell
-./Tester/ExploreLCD/EL_200121_Emulator 17mseq_9v.bin   00110000110001000000
-./Tester/ExploreLCD/EL_200121_Emulator 17mseq_5.5v.bin 00110000110001000000
+```lua
+collection = "tmp"
+sequence = "00110000110001000000"  -- at 2kS/s, each bit lasts 0.5ms
+
+id = mongo_create_one_with_jsonstr(collection, "{}")
+run("Tester/ExploreLCD/EL_200121_Emulator", "17mseq_9v.bin", sequence, collection, id)
+tab = rt.get_file_by_id(collection, id)
+plot(tab.emulated_id)
+run("Tester/ExploreLCD/EL_200121_Emulator", "17mseq_5.5v.bin", sequence, collection, id)
+tab = rt.get_file_by_id(collection, id)
+plot(tab.emulated_id)
 ```
 
-It will send the symbols (1 for charge and 0 for discharge) with different driven voltage of 9V and 5.5V. You can plot the result in GUI, like below:
+It will send the symbols (1 for charge and 0 for discharge) with different driven voltage of 9V and 5.5V. It will plot the results in GUI, like below:
 
 ![](WebGUI/emulated.jpg)
 
